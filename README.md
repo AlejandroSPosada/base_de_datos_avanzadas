@@ -4,8 +4,8 @@ Este repositorio reúne los diferentes proyectos desarrollados por estudiantes d
 
 Los integrantes del equipo son:
 - Alejandro Sepulveda Posada.
-- Tomás Londoño Lopera
-- Daniel Zapata
+- Tomás Londoño Lopera.
+- Daniel Zapata.
 
 El objetivo de este repositorio es centralizar, documentar y compartir los trabajos realizados durante el curso, permitiendo que los estudiantes puedan:
 - Publicar sus proyectos.
