@@ -6,7 +6,7 @@ import os
 base_path = r"Proyecto1\docs\resultados"
 no_index_path = os.path.join(base_path, "queries-base.csv")
 index_path = os.path.join(base_path, "queries-after-index.csv")
-output_path = os.path.join(base_path, "comparison_queries.png")
+output_path = os.path.join(base_path, "comparison_queries_index.png")
 
 # Load CSVs
 no_index_df = pd.read_csv(no_index_path)
