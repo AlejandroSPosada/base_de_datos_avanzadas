@@ -15,11 +15,6 @@ El proyecto consiste en analizar el desempeño de una base de datos en un escena
 **Fecha de entrega:** Semana 5  
 **Sustentación:** Semana 6  
 
-**Integrantes del equipo:**
-- Nombre Apellido
-- Nombre Apellido
-- Nombre Apellido
-
 ---
 
 ## Objetivo del trabajo
