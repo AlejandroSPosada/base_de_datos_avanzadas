@@ -141,11 +141,6 @@
 
 ## explain
 ```
-
-```
-
-## explain analyze
-```
 "Limit  (cost=68708.91..68709.49 rows=5 width=14)"
 "  ->  Gather Merge  (cost=68708.91..68709.49 rows=5 width=14)"
 "        Workers Planned: 2"
@@ -153,4 +148,9 @@
 "              Sort Key: total_amount DESC"
 "              ->  Parallel Seq Scan on orders  (cost=0.00..67708.88 rows=2 width=14)"
 "                    Filter: (customer_id = 9876)"
+```
+
+## explain analyze
+```
+
 ```
