@@ -1,4 +1,4 @@
-# Q1
+# Query 1
 
 ## gráfica explain
 
@@ -68,7 +68,7 @@
 "Execution Time: 3093.692 ms"
 ```
 
-# Q2
+# Query 2
 
 ## gráfica explain
 
@@ -137,7 +137,7 @@
 "Execution Time: 39454.580 ms"
 ```
 
-# Q3
+# Query 3
 
 ## gráfica explain
 
@@ -178,7 +178,7 @@
 "Execution Time: 222.671 ms"
 ```
 
-# Q4
+# Query 4
 
 ## gráfica explain
 
@@ -238,7 +238,7 @@
 "Execution Time: 5159.550 ms"
 ```
 
-# Q5
+# Query 5
 
 ## gráfica explain
 
@@ -273,7 +273,7 @@
 "Planning Time: 0.071 ms"
 "Execution Time: 539.944 ms"
 ```
-# Q6
+# Query 6
 
 ## gráfica explain
 
