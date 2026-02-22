@@ -469,3 +469,144 @@ El procedimiento fue:
 ![Query Performance: No Index vs Index](./resultados/comparison_queries_index.png)
 
 La gráfica muestra la reducción de los tiempos promedio para cada query después de implementar los índices, evidenciando cómo cada índice optimiza el patrón de acceso específico de cada consulta.
+
+---
+
+## 3. Optimización mediante Particionamiento de Tablas
+
+> Para consultar los detalles completos de los resultados de `EXPLAIN` y `EXPLAIN ANALYZE` con particionamiento, revise el documento **despues-particionamiento.md** ubicado en `./metricas/despues-particionamiento.md`.
+
+En esta sección se evaluó el impacto del **particionamiento por rango** sobre la tabla `orders`, dividiendo los datos por año en función de la columna `order_date`. El objetivo fue analizar si la técnica de **partition pruning** permitía reducir el volumen de datos escaneados en consultas que filtran por fecha y, por tanto, disminuir los tiempos de ejecución y el uso de buffers.
+
+Se compararon los tiempos de ejecución en dos escenarios:
+
+-  **CON** particionamiento
+-  **SIN** particionamiento (tabla monolítica original)
+
+> Los resultados se presentan en formato **CON → SIN**.
+
+---
+
+### Resultados – Solo Particionamiento
+
+| Query | CON Partición (ms) | SIN Partición (ms) | Variación |
+|-------|-------------------|-------------------|-----------|
+| Q1 | 3125 | 3035 | -2.9% |
+| Q2 | 40087 | 38862 | -3.1% |
+| Q3 | 199 | 229 | **+13%** |
+| Q4 | 1.46 | 1.52 | ≈ Igual |
+| Q5 | 695 | 599 | -16% |
+| Q6 | 6665 | — | — |
+
+---
+
+### Análisis
+
+Los resultados muestran que el **particionamiento por sí solo no generó mejoras significativas** en el rendimiento general. En algunos casos incluso se observaron tiempos ligeramente mayores.
+
+#### Q1 – Ventas por ciudad en un año
+
+Aunque la consulta filtra por un rango anual (lo que teóricamente debería beneficiarse del *partition pruning*), la mejora no fue significativa. Esto se debe a que cada partición contiene aproximadamente **1 millón de registros**, un volumen que PostgreSQL puede escanear eficientemente en memoria mediante **Parallel Seq Scan**.
+
+El cuello de botella continúa siendo el **Parallel Hash Join** y el procesamiento masivo previo a la agregación.
+
+#### Q2 – Agregación masiva sin filtro temporal
+
+Esta consulta **no depende de `order_date`**, por lo que el particionamiento no tiene impacto real. PostgreSQL sigue escaneando completamente las tablas involucradas, especialmente `order_item`, lo que explica que los tiempos sean prácticamente iguales.
+
+#### Q3 – Últimas órdenes de un cliente
+
+Se observó una mejora leve (~13%). Sin embargo, esta mejora **no es estructural sino marginal**, posiblemente asociada a variaciones de caché o distribución interna de datos.
+
+#### Q5 – Conteo por fecha con función
+
+Aunque la consulta filtra por fecha, el uso de `date_trunc()` **limita la efectividad del pruning**. El motor aún debe evaluar la función por fila dentro de la partición correspondiente, reduciendo el beneficio esperado.
+
+---
+
+### Conclusión del Particionamiento
+
+En el contexto del experimento (5 millones de registros y ejecución en entorno con memoria suficiente), el particionamiento por rango anual:
+
+-  No produjo mejoras significativas.
+-  No redujo de forma drástica los tiempos de ejecución.
+-  Resultó **poco determinante** cuando el volumen por partición aún es relativamente manejable.
+
+> Esto demuestra que el particionamiento **no siempre genera mejoras automáticas**, especialmente cuando el dataset puede mantenerse mayormente en memoria.
+
+---
+
+## 4. Partición + Índices
+
+Posteriormente se evaluó el impacto **combinado** de:
+
+-  Particionamiento por rango anual.
+-  Índices específicos sobre la tabla particionada.
+
+> Los tiempos se presentan nuevamente en formato **CON (Partición + Índices) → SIN (tabla original sin partición)**.
+
+---
+
+### Resultados – Partición + Índices
+
+| Query | CON (Part+Idx) ms | SIN ms | Variación |
+|-------|------------------|--------|-----------|
+| Q1 | 2867 | 3035 | **+5.5%** |
+| Q2 | 39226 | 38862 | -0.9% |
+| Q3 | 0.223 | 229 | **+99.9%**  |
+| Q4 | 1.53 | 1.52 | ≈ Igual |
+| Q5 | 560 | 599 | **+6.5%** |
+| Q6 | 10416 | 6665 | **-36%**  |
+
+---
+
+### Análisis
+
+#### Q1 – Filtro por fecha + join
+
+Se observa una mejora moderada (~5%). En este caso el motor:
+
+- Realiza **partition pruning** (solo año 2023).
+- Utiliza **índice sobre `order_date`**.
+- Reduce ligeramente los buffers leídos.
+
+Sin embargo, el **Hash Join** sigue siendo el principal costo del plan.
+
+#### Q3 – Últimas órdenes de cliente
+
+Aquí se evidencia la **mejora más significativa** del experimento:
+
+| Métrica | Antes | Después |
+|---------|-------|---------|
+| Tiempo de ejecución | 229 ms | **0.223 ms** |
+| Tipo de escaneo | Parallel Seq Scan | **Index Scan** |
+| Escaneo masivo |  Presente |  Eliminado |
+
+La combinación del índice compuesto `(customer_id, order_date DESC)` con el particionamiento permitió **acceso directo** a las filas necesarias.
+
+#### Q5 – Conteo por fecha
+
+Se observa una mejora leve (~6%). Aunque el *pruning* reduce el número de particiones analizadas, la función `date_trunc()` **limita el uso óptimo del índice**.
+
+#### Q6 – Join con pagos
+
+En este caso el rendimiento **empeoró (-36%)**. Esto puede deberse a:
+
+- Mayor complejidad del plan con múltiples particiones.
+- *Overhead* adicional del *planner* al manejar particiones.
+- Uso de *joins* sobre estructuras particionadas.
+
+>  Este resultado evidencia que el particionamiento puede **introducir sobrecostos** en consultas que no se benefician directamente del filtro por partición.
+
+---
+
+### Conclusión General
+
+La combinación de **particionamiento + índices** mostró que:
+
+-  Las mayores mejoras se obtienen cuando el patrón de consulta es **altamente selectivo** (Q3).
+-  El particionamiento por sí solo **no es suficiente** para mejorar agregaciones masivas.
+-  En algunos casos puede incluso **introducir overhead** adicional.
+-  El mayor impacto en rendimiento sigue estando asociado al **diseño adecuado de índices**.
+
+> Este experimento demuestra que el particionamiento es una estrategia estructural útil para grandes volúmenes históricos, pero su impacto real **depende fuertemente del patrón de acceso** de las consultas.
