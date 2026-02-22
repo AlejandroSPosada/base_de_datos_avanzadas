@@ -41,6 +41,7 @@ FROM orders
 WHERE order_date >= now() - interval '30 days';
 
 -- Q6: Órdenes más costosas de un cliente específico (filtro + sort + limit)
+EXPLAIN
 SELECT order_id, total_amount
 FROM orders
 WHERE customer_id = 9876
