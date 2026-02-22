@@ -1,10 +1,10 @@
 -- Q1: Ventas por ciudad en un año (sin índices en orders.order_date ni orders.customer_id)
-CREATE INDEX ON orders(order_date);
-CREATE INDEX ON orders(customer_id);
+CREATE INDEX idx_orders_date_customer
+ON orders (order_date, customer_id);
 
 -- Q2: Top productos vendidos (agregación masiva)
-CREATE INDEX ON orders(order_date);
-CREATE INDEX ON orders(customer_id);
+CREATE INDEX idx_order_item_product
+ON order_item(product_id);
 
 -- Q3: Dashboard: últimas órdenes de un cliente (filtro + sort)
 CREATE INDEX idx_orders_customer_date

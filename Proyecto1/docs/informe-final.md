@@ -6,6 +6,8 @@ Este informe tendrá la siguiente estructura:
 2. Luego se evaluará la mejora del rendimiento mediante la creación de índices.
 3. Posteriormente se analizarán posibles optimizaciones utilizando particionamiento de tablas.
 4. Finalmente, se propondrán mejoras a partir del replanteamiento o reescritura de los queries.
+5. Concurrencia
+6. Performance tuning del servidor de base de datos
 
 # 1. ANALISIS QUERIES EN ESTADO BASE
 
@@ -191,3 +193,27 @@ El costo principal del query se encuentra en el **Parallel Seq Scan de la tabla 
 ### Análisis
 
 El tiempo del query está dominado por el **Parallel Seq Scan sobre la tabla `orders`**, donde se realiza un escaneo completo para encontrar muy pocas filas que coinciden con `customer_id = 9876`. Cada worker revisa millones de registros y descarta casi todos mediante el filtro, lo que provoca que la mayor parte del tiempo se invierta en la lectura y evaluación de datos. Aunque el ordenamiento y el `LIMIT` son operaciones ligeras y el paralelismo ayuda a distribuir la carga, el cuello de botella principal sigue siendo el acceso masivo a la tabla y la gran cantidad de filas removidas por el filtro, evidenciado también por el alto número de páginas leídas desde disco.
+
+# 2. PROPUESTA Y EVALUACIÓN DE ÍNDICES
+
+En esta sección se propone la creación de índices específicos para cada query analizado previamente, con el objetivo de mejorar el rendimiento observado en el estado base. La selección de cada índice se justifica a partir de los resultados obtenidos con **EXPLAIN** y **EXPLAIN ANALYZE**, identificando patrones como escaneos secuenciales sobre grandes tablas, alto número de filas filtradas, joins costosos y operaciones de ordenamiento que requieren procesar grandes volúmenes de datos antes de devolver los resultados. Con base en este análisis, se diseñan índices sobre las columnas utilizadas en filtros, joins y ordenamientos, buscando reducir el número de páginas leídas, disminuir la cantidad de filas procesadas y mejorar la eficiencia del plan de ejecución. Posteriormente, tras aplicar cada índice propuesto, se vuelve a ejecutar **EXPLAIN** y **EXPLAIN ANALYZE** para comparar el nuevo plan con el estado base, permitiendo evidenciar cambios en el tipo de acceso a las tablas, reducción en costos estimados, tiempos de ejecución y uso de recursos, y así evaluar de manera objetiva las mejoras obtenidas.
+
+## Query 1
+
+El índice `idx_orders_date_customer` sobre `(order_date, customer_id)` se justifica porque en el estado base del `EXPLAIN ANALYZE` el mayor costo del plan proviene del `Parallel Seq Scan` sobre la tabla `orders`, donde se leen grandes volúmenes de datos y se descartan muchas filas mediante el filtro por rango de fechas. Al indexar primero `order_date`, el motor puede localizar directamente las órdenes dentro del período consultado sin recorrer toda la tabla, reduciendo significativamente la cantidad de páginas leídas y el trabajo de los workers paralelos. Además, incluir `customer_id` en el mismo índice mejora el rendimiento del `JOIN` con la tabla `customer`, ya que facilita la localización de las filas necesarias para la unión después de aplicar el filtro temporal, disminuyendo el costo del `Parallel Hash Join` y optimizando la fase inicial del plan, que fue identificada como el principal cuello de botella del query.
+
+## Query 2
+
+El índice `idx_order_item_product` sobre `order_item(product_id)` se justifica porque el análisis del plan de ejecución mostró que el mayor tiempo del query se concentra en el `Parallel Seq Scan` de la tabla `order_item` y en el `Hash Join` con la tabla `product`, donde se procesan decenas de millones de filas antes de realizar la agregación. Este índice permite acceder de forma más eficiente a los registros agrupados por producto, que es precisamente la columna utilizada en el `JOIN` y en la lógica de agregación del query. Como resultado, se reduce la cantidad de datos que deben leerse desde disco y procesarse en memoria antes de calcular el `SUM(quantity)` y ordenar los resultados para obtener el top de productos vendidos, mitigando el principal cuello de botella identificado en el estado base.
+
+## Query 3 
+El índice compuesto `idx_orders_customer_date (customer_id, order_date DESC)` se creó porque la consulta filtra por `customer_id` y luego ordena por `order_date` en orden descendente con un `LIMIT`. Este índice permite que la base de datos encuentre directamente las órdenes de ese cliente ya ordenadas por fecha, evitando un escaneo completo de la tabla y un paso adicional de ordenamiento. En la práctica, el motor puede recorrer el índice y obtener inmediatamente las últimas órdenes, lo que reduce drásticamente el tiempo de ejecución, especialmente en tablas grandes.
+
+## Query 4
+El índice `idx_orders_amount_customer (total_amount DESC, customer_id)` se justifica porque la consulta filtra por `total_amount > 500`, realiza un `JOIN` con `customer` y ordena los resultados por el monto de la orden en orden descendente. Al tener `total_amount` como primera columna del índice, la base de datos puede localizar rápidamente las órdenes de mayor valor sin escanear toda la tabla. Además, incluir `customer_id` en el índice facilita el `JOIN` con la tabla de clientes, reduciendo el costo del plan en las etapas de búsqueda y ordenamiento.
+
+## Query 5
+El índice `idx_orders_order_date (order_date)` se creó para optimizar el filtro por rango de fechas (`order_date >= now() - interval '30 days'`). Sin este índice, el motor necesita escanear toda la tabla para identificar las órdenes recientes. Con el índice, la base de datos puede acceder directamente al segmento de datos correspondiente a los últimos 30 días, reduciendo considerablemente el número de páginas leídas desde disco y acelerando el cálculo del conteo.
+
+## Query 6
+El índice compuesto `idx_orders_customer_amount (customer_id, total_amount DESC) INCLUDE (order_id)` se diseñó específicamente para esta consulta porque filtra por `customer_id`, ordena por `total_amount` y utiliza `LIMIT`. Con este índice, el motor puede encontrar directamente las órdenes de ese cliente ya ordenadas por monto, evitando un escaneo completo y un ordenamiento adicional. Además, la cláusula `INCLUDE (order_id)` permite que el índice cubra completamente la consulta, lo que significa que la base de datos puede obtener todos los datos necesarios directamente desde el índice sin acceder a la tabla principal, reduciendo aún más el costo de ejecución.
