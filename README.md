@@ -1,28 +1,32 @@
 # Proyectos de Bases de Datos Avanzadas – Estudiantes de EAFIT
 
-Este repositorio reúne los diferentes proyectos desarrollados por estudiantes de la Universidad EAFIT para la asignatura **Bases de Datos Avanzadas**, dictada por el profesor Edwin Nelson Montoya Múnera.
+Este repositorio contiene los proyectos desarrollados por nuestro equipo para la asignatura **Bases de Datos Avanzadas** de la Universidad EAFIT, dictada por el profesor Edwin Nelson Montoya Múnera.
 
-Los integrantes del equipo son:
-- Alejandro Sepulveda Posada.
-- Tomás Londoño Lopera.
-- Daniel Zapata.
+## Integrantes del equipo
 
-El objetivo de este repositorio es centralizar, documentar y compartir los trabajos realizados durante el curso, permitiendo que los estudiantes puedan:
-- Publicar sus proyectos.
-- Documentar sus soluciones.
-- Aprender de los enfoques de otros compañeros.
-- Mantener un historial organizado de los desarrollos del curso.
+- Alejandro Sepulveda Posada
+- Tomás Londoño Lopera
+- Daniel Zapata
+
+## Propósito del repositorio
+
+El objetivo de este repositorio es documentar y almacenar los proyectos realizados durante el curso, permitiendo:
+
+- Organizar el desarrollo de los proyectos del equipo.
+- Documentar las soluciones implementadas.
+- Facilitar la replicación de los experimentos realizados.
+- Mantener un historial claro del trabajo realizado durante el semestre.
 
 ---
 
 ## Estructura del repositorio
 
-Cada estudiante o grupo debe crear una carpeta con el nombre de su proyecto o equipo.
+Cada proyecto del curso se organiza en una carpeta independiente.
 
 Ejemplo de estructura:
 
     /
-    ├── proyecto-1-nombre-del-proyecto/
+    ├── proyecto-1-optimización-postgresql/
     │   ├── README.md
     │   ├── src/
     │   ├── database/
@@ -36,61 +40,58 @@ Ejemplo de estructura:
 
 ---
 
-## Requisitos para subir un proyecto
+## Contenido de los proyectos
 
-Cada proyecto debe incluir:
+Cada proyecto incluye:
 
-- Un README.md que explique:
-  - Nombre del proyecto
-  - Integrantes
-  - Descripción del problema
-  - Tecnologías utilizadas
-  - Estructura del sistema
-  - Instrucciones para ejecutar el proyecto
-
-- Scripts de base de datos:
-  - Creación de tablas
-  - Inserción de datos
-  - Procedimientos almacenados
-  - Triggers o funciones (si aplica)
-
-- Documentación del modelo de datos:
-  - Modelo relacional
-  - Diagrama entidad-relación
-  - Explicación de decisiones de diseño
+- Documentación del caso de estudio.
+- Scripts de base de datos.
+- Resultados de pruebas de rendimiento.
+- Análisis antes y después de optimizaciones.
+- Instrucciones para replicar el experimento.
 
 ---
 
-## Cómo contribuir
+## Tecnologías utilizadas
 
-1. Haz un fork de este repositorio.
-2. Crea una nueva rama para tu proyecto.
-3. Agrega la carpeta de tu proyecto siguiendo la estructura definida.
-4. Realiza un pull request con una breve descripción del proyecto.
+En los proyectos de este repositorio se utilizan principalmente:
 
----
-
-## Objetivos académicos del repositorio
-
-Este repositorio busca reforzar conocimientos en:
-
-- Modelado avanzado de bases de datos
-- Optimización de consultas
-- Procedimientos almacenados
-- Sistemas distribuidos de datos
-- Integración con aplicaciones
-- Buenas prácticas en documentación técnica
+- PostgreSQL
+- Docker
+- AWS EC2
+- AWS RDS
+- SQL
+- Git y GitHub
 
 ---
 
-## Licencia
+## Cómo ejecutar los proyectos
 
-Este repositorio es únicamente para fines académicos dentro del curso de Bases de Datos Avanzadas.
+Las instrucciones específicas para ejecutar cada proyecto se encuentran dentro del README de cada carpeta de proyecto.
+
+Generalmente incluyen:
+
+1. Levantar el entorno con Docker o en la nube.
+2. Crear la base de datos.
+3. Cargar los datos.
+4. Ejecutar las pruebas de rendimiento.
+5. Aplicar optimizaciones.
+6. Analizar resultados.
 
 ---
 
-## Contacto
+## Objetivos de aprendizaje
 
-Para dudas relacionadas con la materia o los proyectos, contactar al profesor:
+A través de estos proyectos buscamos fortalecer habilidades en:
 
-Edwin Nelson Montoya Múnera
+- Optimización de bases de datos
+- Análisis de rendimiento
+- Uso de herramientas de monitoreo
+- Diseño de soluciones escalables
+- Buenas prácticas de documentación técnica
+
+---
+
+## Nota
+
+Este repositorio hace parte del desarrollo académico del curso **Bases de Datos Avanzadas** en la Universidad EAFIT.
