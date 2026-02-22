@@ -1,15 +1,28 @@
 # INFORME FINAL
 
-Este informe tendrá la siguiente estructura:
+Este informe se estructura en seis secciones principales para ofrecer un análisis completo del rendimiento de las queries y de la base de datos:
 
-1. Primero se realizará un análisis de los queries en su estado base, es decir, sin ninguna optimización.
-2. Luego se evaluará la mejora del rendimiento mediante la creación de índices.
-3. Posteriormente se analizarán posibles optimizaciones utilizando particionamiento de tablas.
-4. Finalmente, se propondrán mejoras a partir del replanteamiento o reescritura de los queries.
-5. Concurrencia
-6. Performance tuning del servidor de base de datos
+1. **Análisis de Queries Base**  
+   Evaluación del comportamiento y tiempos de ejecución de las queries en su estado original, sin ninguna optimización ni índices.
+
+2. **Impacto de la Creación de Índices**  
+   Estudio de cómo los índices específicos mejoran el rendimiento de las consultas, incluyendo comparativas de tiempos y uso de recursos.
+
+3. **Optimización mediante Particionamiento de Tablas**  
+   Exploración de estrategias de particionamiento para mejorar el acceso a grandes volúmenes de datos y reducir los costos de escaneo.
+
+4. **Reescritura y Mejora de Queries**  
+   Propuestas de optimización basadas en la reformulación de consultas SQL para aprovechar mejor los índices, joins y agregaciones.
+
+5. **Concurrencia y Acceso Simultáneo**  
+   Análisis de cómo múltiples usuarios o procesos afectan el rendimiento y estrategias para minimizar bloqueos y contención.
+
+6. **Tuning de Servidor de Base de Datos**  
+   Ajustes y recomendaciones de configuración del servidor (memoria, buffers, paralelismo, planificación de consultas) para maximizar el rendimiento general.
 
 # 1. ANALISIS QUERIES EN ESTADO BASE
+
+Para consultar los detalles completos de los resultados de `EXPLAIN` y `EXPLAIN ANALYZE`, revise el documento `baseline.md` ubicado en `./metricas/baseline.md`.
 
 En este análisis se evaluaron varios queries en su estado base utilizando **EXPLAIN** y **EXPLAIN ANALYZE** para observar cómo el motor de la base de datos ejecuta cada consulta, identificar el flujo del plan de ejecución y medir su comportamiento real en términos de tiempo, filas procesadas y uso de recursos. En los queries analizados se realizaron distintos tipos de operaciones: agregaciones sobre grandes volúmenes de datos (por ejemplo, calcular métricas o conteos), joins entre tablas grandes como `orders`, `customer`, `product` y `order_item`, consultas que buscan los registros con mayores valores mediante ordenamientos y límites (`ORDER BY` + `LIMIT`), y filtros específicos por columnas como `customer_id`, fechas recientes o montos de compra. En todos los casos, el análisis se enfocó en observar cómo el optimizador utiliza paralelismo (workers), escaneos secuenciales paralelos, hash joins, agregaciones parciales y finales, y operaciones de ordenamiento para producir el resultado final, permitiendo entender el comportamiento del sistema antes de cualquier optimización y establecer una línea base del rendimiento de las consultas.
 
@@ -195,6 +208,9 @@ El costo principal del query se encuentra en el **Parallel Seq Scan de la tabla 
 El tiempo del query está dominado por el **Parallel Seq Scan sobre la tabla `orders`**, donde se realiza un escaneo completo para encontrar muy pocas filas que coinciden con `customer_id = 9876`. Cada worker revisa millones de registros y descarta casi todos mediante el filtro, lo que provoca que la mayor parte del tiempo se invierta en la lectura y evaluación de datos. Aunque el ordenamiento y el `LIMIT` son operaciones ligeras y el paralelismo ayuda a distribuir la carga, el cuello de botella principal sigue siendo el acceso masivo a la tabla y la gran cantidad de filas removidas por el filtro, evidenciado también por el alto número de páginas leídas desde disco.
 
 # 2. PROPUESTA Y EVALUACIÓN DE ÍNDICES
+
+Para consultar los detalles completos de los resultados de `EXPLAIN` y `EXPLAIN ANALYZE` después de los indices, revise el documento `despues-indices.md` ubicado en `./metricas/despues-indices.md`.
+
 
 En esta sección se propone la creación de índices específicos para cada query analizado previamente, con el objetivo de mejorar el rendimiento observado en el estado base. La selección de cada índice se justifica a partir de los resultados obtenidos con **EXPLAIN** y **EXPLAIN ANALYZE**, identificando patrones como escaneos secuenciales sobre grandes tablas, alto número de filas filtradas, joins costosos y operaciones de ordenamiento que requieren procesar grandes volúmenes de datos antes de devolver los resultados. Con base en este análisis, se diseñan índices sobre las columnas utilizadas en filtros, joins y ordenamientos, buscando reducir el número de páginas leídas, disminuir la cantidad de filas procesadas y mejorar la eficiencia del plan de ejecución. Posteriormente, tras aplicar cada índice propuesto, se vuelve a ejecutar **EXPLAIN** y **EXPLAIN ANALYZE** para comparar el nuevo plan con el estado base, permitiendo evidenciar cambios en el tipo de acceso a las tablas, reducción en costos estimados, tiempos de ejecución y uso de recursos, y así evaluar de manera objetiva las mejoras obtenidas.
 
@@ -385,6 +401,9 @@ Antes de crear el índice compuesto con columnas `customer_id` y `total_amount D
 
 
 ## Experimentos Antes y Después de los Índices
+
+Para consultar los detalles completos de los resultados de del experimento, revise los documentos `queries-after-index.csv`, `queries-base.csv` y `comparision_queries_index.jpg` ubicados en `./resultados`.
+
 
 ### Descripción del Experimento
 
