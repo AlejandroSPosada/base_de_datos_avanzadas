@@ -681,4 +681,4 @@ El análisis demuestra que la reescritura estratégica de consultas puede:
 - Disminuir el consumo de memoria y buffers
 - Mejorar la eficiencia del plan sin alterar estructura física
 
-En combinación con índices y particionamiento, el query tuning constituye una de las herram
+En combinación con índices y particionamiento, el query tuning constituye una de las herramientas más efectivas para optimizar el rendimiento sin necesidad de modificar la infraestructura física de la base de datos.
