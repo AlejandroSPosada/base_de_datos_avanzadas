@@ -778,7 +778,7 @@ GROUP BY customer_id
 ORDER BY COUNT(*) DESC;
 
 y este fue el tiempo de ejecución antes del tuning de los parametros:
-![](\Proyecto1\docs\resultados\executionBeforetuning.png)
+![](Proyecto1/docs/resultados/executionBeforetuning.png)
 
 ## 6.3 Ajustes Aplicados
 
@@ -815,7 +815,7 @@ SHOW effective_cache_size;
 
 ## 6.5 Prueba de Rendimiento Posterior
 configuracion posterior al tuning:
-![alt text](\Proyecto1\docs\resultados\afterTuning.png)
+![alt text](Proyecto1/docs/resultados/afterTuning.png)
 
 ## 6.6 Comparación de Resultados
 
