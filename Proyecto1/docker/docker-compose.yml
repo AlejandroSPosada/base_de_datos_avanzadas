@@ -29,7 +29,7 @@ services:
       - -c
       - log_directory=/var/log/postgresql
       - -c
-      - logging_collector=on
+      - logging_collector=on 
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]

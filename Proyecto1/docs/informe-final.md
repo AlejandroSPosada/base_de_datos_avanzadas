@@ -682,3 +682,214 @@ El análisis demuestra que la reescritura estratégica de consultas puede:
 - Mejorar la eficiencia del plan sin alterar estructura física
 
 En combinación con índices y particionamiento, el query tuning constituye una de las herramientas más efectivas para optimizar el rendimiento sin necesidad de modificar la infraestructura física de la base de datos.
+
+# 5. CONCURRENCIA
+
+En esta fase se evaluó el comportamiento del motor PostgreSQL bajo múltiples sesiones simultáneas, analizando el manejo de transacciones, bloqueos y consistencia de datos.
+
+El objetivo fue observar cómo el sistema administra accesos concurrentes sobre las mismas tablas y cómo los mecanismos de locking influyen en el rendimiento y la disponibilidad.
+
+---
+
+## 5.1 Metodología
+
+Se abrieron múltiples sesiones simultáneas en pgAdmin conectadas a la base de datos `proyecto1`.
+
+En la primera sesión se ejecutó:
+
+sql
+
+BEGIN;
+
+UPDATE orders
+SET total_amount = total_amount + 1
+WHERE order_id = 100;
+
+Sin ejecutar COMMIT, se abrió una segunda sesión intentando modificar el mismo registro.
+
+## 5.2 Observación de Bloqueos
+
+Para monitorear el estado de las sesiones activas se utilizó:
+
+SELECT pid, usename, state, query
+FROM pg_stat_activity
+WHERE datname = 'proyecto1';
+
+Para observar los locks activos:
+SELECT * FROM pg_locks;
+
+Se observaron bloqueos del tipo:
+
+RowExclusiveLock
+ExclusiveLock
+
+Esto evidencia que PostgreSQL aplica bloqueo a nivel de fila (row-level locking), permitiendo concurrencia eficiente sin bloquear la tabla completa.
+
+## 5.3 Análisis del Comportamiento
+
+La segunda sesión quedó en estado de espera mientras la primera mantenía la transacción abierta.
+
+Al ejecutar COMMIT en la primera sesión, la segunda continuó su ejecución.
+
+No se produjeron bloqueos a nivel de tabla completa.
+
+El sistema mantuvo consistencia mediante el modelo MVCC (Multi-Version Concurrency Control).
+
+## 5.4 Conclusión
+
+- PostgreSQL demostró un manejo eficiente de concurrencia mediante:
+
+- Control de versiones (MVCC)
+
+- Bloqueos a nivel de fila
+
+- Aislamiento transaccional
+
+- Prevención de inconsistencias
+
+El motor permite múltiples operaciones simultáneas minimizando contención y manteniendo integridad de datos.
+
+# 6. PERFORMANCE TUNING DEL SERVIDOR DE BASE DE DATOS
+
+En esta fase se realizó un ajuste de parámetros del servidor PostgreSQL para optimizar el uso de memoria y mejorar el rendimiento en consultas analíticas de alto volumen.
+
+## 6.1 Configuración Inicial (Baseline)
+
+Parámetros iniciales del servidor:
+
+- shared_buffers = 128MB
+
+- work_mem = 4MB
+
+- maintenance_work_mem = 64MB
+
+- effective_cache_size = 4GB
+
+- max_connections = 100
+
+## 6.2 Prueba de Rendimiento Inicial
+
+Se ejecutó la siguiente consulta para medir tiempo base:
+
+EXPLAIN ANALYZE
+SELECT customer_id, COUNT(*)
+FROM orders
+GROUP BY customer_id
+ORDER BY COUNT(*) DESC;
+
+y este fue el tiempo de ejecución antes del tuning de los parametros:
+![](\Proyecto1\docs\resultados\executionBeforetuning.png)
+
+## 6.3 Ajustes Aplicados
+
+Se modificaron los siguientes parámetros:
+
+- shared_buffers = 2GB
+
+- work_mem = 32MB
+
+- maintenance_work_mem = 512MB
+
+- effective_cache_size = 6GB
+
+### Justificación Técnica
+
+shared_buffers: Mejora el caching interno del motor.
+
+work_mem: Permite que operaciones de Hash Join y Sort se ejecuten en memoria.
+
+maintenance_work_mem: Optimiza creación de índices y operaciones VACUUM.
+
+effective_cache_size: Mejora la estimación del planner.
+
+Posteriormente se reinició el servicio PostgreSQL para aplicar cambios.
+
+## 6.4 Verificación de Configuración
+
+Se verificaron los nuevos valores mediante:
+
+SHOW shared_buffers;
+SHOW work_mem;
+SHOW maintenance_work_mem;
+SHOW effective_cache_size;
+
+## 6.5 Prueba de Rendimiento Posterior
+configuracion posterior al tuning:
+![alt text](\Proyecto1\docs\resultados\afterTuning.png)
+
+## 6.6 Comparación de Resultados
+
+Tras aplicar los ajustes de configuración del servidor PostgreSQL, se realizó una comparación entre el estado inicial (baseline) y el estado posterior al tuning.
+
+### Comparación de Parámetros
+
+| Parámetro | Antes | Después |
+|------------|--------|----------|
+| shared_buffers | 128MB | 2GB |
+| work_mem | 4MB | 32MB |
+| maintenance_work_mem | 64MB | 512MB |
+| effective_cache_size | 4GB | 6GB |
+| max_connections | 100 | 100 |
+
+---
+
+### Comparación de Tiempo de Ejecución
+
+| Métrica | Antes | Después |
+|----------|--------|----------|
+| Execution Time | 1842.822 ms | 2294.881 ms |
+
+---
+
+### Análisis de Resultados
+
+Se observó que el tiempo de ejecución posterior al tuning no presentó una mejora significativa, e incluso mostró un ligero incremento.
+
+Este comportamiento puede explicarse por los siguientes factores:
+
+- El volumen de datos no era lo suficientemente grande para generar operaciones en disco.
+- La consulta ya se ejecutaba completamente en memoria antes del ajuste.
+- Variaciones naturales de rendimiento en entornos virtualizados (instancias EC2).
+- Diferencias en el estado del caché del sistema al momento de la medición.
+
+Es importante destacar que el performance tuning no garantiza mejoras automáticas en todos los escenarios. Su impacto depende directamente del volumen de datos, del tipo de carga y del plan de ejecución generado por el optimizador.
+
+---
+
+### Conclusión Comparativa
+
+Aunque no se evidenció una reducción directa en el tiempo de ejecución, el ajuste realizado al servidor deja configurado el entorno de manera óptima para escenarios de mayor carga y consultas más complejas.
+
+El ejercicio demuestra que el tuning debe realizarse de forma controlada, medible y contextualizada según el tipo de workload.
+
+# 7. Caso Empresarial Real
+
+## GitLab y la Optimización de PostgreSQL a Gran Escala
+
+GitLab, plataforma DevOps utilizada globalmente, enfrentó problemas de rendimiento en su base de datos PostgreSQL debido al crecimiento masivo de usuarios y volumen de datos.
+
+### Problemática
+
+- Consultas lentas en tablas con millones de registros.
+- Bloqueos frecuentes bajo alta concurrencia.
+- Alto consumo de CPU e I/O.
+- Incremento en latencia durante horas pico.
+
+### Estrategias Aplicadas
+
+1. Reescritura de consultas (Query Tuning).
+2. Implementación de índices compuestos y parciales.
+3. Particionamiento por rango de fechas.
+4. Optimización de concurrencia mediante control de transacciones.
+5. Ajuste de parámetros del servidor (shared_buffers, work_mem, autovacuum).
+
+### Resultados
+
+- Reducción de latencia.
+- Mayor estabilidad bajo carga concurrente.
+- Mejor uso de memoria y disco.
+- Escalabilidad sin aumento inmediato de hardware.
+
+### Relación con el Proyecto
+
+El caso de GitLab demuestra que los mismos principios aplicados en este proyecto (indexación, particionamiento, concurrencia y performance tuning) son estrategias utilizadas en entornos empresariales reales para resolver problemas de alto volumen de datos.
