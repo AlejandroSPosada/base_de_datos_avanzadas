@@ -1,3 +1,136 @@
+# Proyecto 2 — Bases de Datos Distribuidas
+
+## Descripción general
+
+Este proyecto implementa un sistema distribuido basado en PostgreSQL para simular el comportamiento de una red social. Se exploran conceptos como particionamiento horizontal (sharding), enrutamiento de consultas, transacciones distribuidas y comparación con sistemas NewSQL.
+
+---
+
+## Dominio del problema
+
+Se modela una red social simplificada en la cual los usuarios pueden crear publicaciones (posts). El sistema está diseñado para simular un entorno con alta generación de datos y consultas frecuentes, similar a plataformas como Twitter o Instagram. Este dominio es adecuado para experimentar con particionamiento y distribución de datos, ya que permite segmentar la información de forma natural por usuario.
+
+---
+
+## Modelo de datos
+
+Se definieron las siguientes tablas principales:
+
+**1. users**
+
+- id (PK)  
+- username  
+- email  
+- created_at  
+
+**2. posts**
+
+- id (PK)  
+- user_id (FK → users.id)  
+- content  
+- created_at  
+
+**3. follows**
+
+- follower_id (FK → users.id)  
+- followed_id (FK → users.id)  
+- created_at  
+
+**4. likes**
+
+- user_id (FK → users.id)  
+- post_id (FK → posts.id)  
+- created_at  
+
+---
+
+## Operaciones
+
+### OLTP (transaccionales)
+
+- Crear un post  
+- Dar like a un post  
+- Seguir a otro usuario  
+- Consultar posts de un usuario específico  
+
+Estas operaciones son frecuentes, de baja latencia y afectan pocas filas.
+
+### OLAP (analíticas)
+
+- Obtener los usuarios con más publicaciones  
+- Calcular los posts más populares (más likes)  
+
+Estas consultas requieren agregaciones y procesamiento de grandes volúmenes de datos.
+
+---
+
+## Arquitectura del sistema
+
+El sistema está compuesto por múltiples nodos PostgreSQL desplegados en instancias independientes (AWS EC2). Cada nodo almacena una partición de los datos basada en rangos de `user_id`.
+
+---
+
+## Estrategia de distribución (Sharding)
+
+El sistema utiliza sharding por rango de `user_id`, distribuyendo los datos entre múltiples nodos. Esto permite balancear la carga y mejorar el rendimiento en consultas dirigidas, simulando el comportamiento de sistemas distribuidos reales.
+
+Se implementa la siguiente distribución:
+
+- Nodo 1 → usuarios 1–3000  
+- Nodo 2 → usuarios 3001–6000  
+- Nodo 3 → usuarios 6001–10000  
+
+---
+
+## Configuración e instalación
+
+1. Crear instancias PostgreSQL en AWS  
+2. Ejecutar scripts en cada nodo:  
+
+   - `01_create_tables.sql`  
+   - `02_indexes.sql`  
+   - `03_inserts.sql` (con datos segmentados)  
+
+3. Verificar carga de datos  
+
+---
+
+## Enrutamiento de consultas
+
+La lógica de enrutamiento se basa en el rango de `user_id`:
+
+- Si `user_id <= 3000` → Nodo 1  
+- Si `user_id <= 6000` → Nodo 2  
+- En otro caso → Nodo 3  
+
+Esto permite dirigir las consultas directamente al nodo que contiene los datos.
+
+---
+
+## Experimentos y resultados
+
+Se evaluaron distintos tipos de consultas:
+
+- Consultas selectivas (por usuario)  
+- Consultas tipo feed (múltiples usuarios)  
+- Consultas agregadas (GROUP BY)  
+- Comparación con tabla no particionada  
+
+Se utilizaron herramientas como `EXPLAIN ANALYZE` para medir rendimiento.
+
+---
+
+## Transacciones distribuidas
+
+Se implementó un esquema de Two-Phase Commit (2PC) utilizando:
+
+- `PREPARE TRANSACTION`  
+- `COMMIT PREPARED`  
+
+Esto permite garantizar consistencia entre múltiples nodos.
+
+---
+
 ## Comparativa: PostgreSQL vs NewSQL (CockroachDB / YugabyteDB)
 
 | Dimensión | PostgreSQL (clásico distribuido) | NewSQL (CockroachDB / YugabyteDB) |
@@ -26,8 +159,7 @@
 
 ---
 
-> **Nota:** Los valores de latencia y comportamiento exacto dependen de la configuración del cluster, la geografía de los nodos y la carga de trabajo. Los experimentos del proyecto documentan mediciones concretas en el ambiente de laboratorio.
-
+## Análisis crítico
 
 El uso de PostgreSQL con particionamiento manual permite simular ciertos aspectos de sistemas distribuidos, como la segmentación de datos y la optimización de consultas mediante técnicas como partition pruning. Sin embargo, este enfoque implica una alta carga operativa, ya que la lógica de distribución, enrutamiento de consultas y consistencia entre nodos debe ser gestionada manualmente por el desarrollador. Esto incrementa la complejidad del sistema y lo hace propenso a errores, especialmente en escenarios con múltiples nodos y transacciones concurrentes.
 
@@ -37,174 +169,13 @@ En términos prácticos, PostgreSQL resulta adecuado para sistemas donde se requ
 
 ---
 
-### Dominio del problema
-
-Se modela una red social simplificada en la cual los usuarios pueden crear publicaciones (posts). El sistema está diseñado para simular un entorno con alta generación de datos y consultas frecuentes, similar a plataformas como Twitter o Instagram. Este dominio es adecuado para experimentar con particionamiento y distribución de datos, ya que permite segmentar la información de forma natural por usuario.
-
----
-
-### Modelo de datos
-
-Se definieron las siguientes tablas principales:
-
-**1. users**
-
-* id (PK)
-* username
-* email
-* created_at
-
-**2. posts**
-
-* id (PK)
-* user_id (FK → users.id)
-* content
-* created_at
-
-**3. follows**
-
-* follower_id (FK → users.id)
-* followed_id (FK → users.id)
-* created_at
-
-**4. likes**
-
-* user_id (FK → users.id)
-* post_id (FK → posts.id)
-* created_at
-
----
-
-### Operaciones OLTP (transaccionales)
-
-* Crear un post
-* Dar like a un post
-* Seguir a otro usuario
-* Consultar posts de un usuario específico
-
-Estas operaciones son frecuentes, de baja latencia y afectan pocas filas.
-
----
-
-### Operaciones OLAP (analíticas)
-
-* Obtener los usuarios con más publicaciones
-* Calcular los posts más populares (más likes)
-
-Estas consultas requieren agregaciones y procesamiento de grandes volúmenes de datos.
-
----
-
-### Estrategia de distribución
-
-El sistema utiliza sharding por rango de `user_id`, distribuyendo los datos entre múltiples nodos. Esto permite balancear la carga y mejorar el rendimiento en consultas dirigidas, simulando el comportamiento de sistemas distribuidos reales.
-
----
-
-# Proyecto 2 — Bases de Datos Distribuidas
-
-## 📌 Descripción general
-
-Este proyecto implementa un sistema distribuido basado en PostgreSQL para simular el comportamiento de una red social. Se exploran conceptos como particionamiento horizontal (sharding), enrutamiento de consultas, transacciones distribuidas y comparación con sistemas NewSQL.
-
----
-
-## 🧱 Arquitectura del sistema
-
-El sistema está compuesto por múltiples nodos PostgreSQL desplegados en instancias independientes (AWS EC2). Cada nodo almacena una partición de los datos basada en rangos de `user_id`.
-
----
-
-## 🧠 Estrategia de distribución (Sharding)
-
-Se implementa sharding por rango de `user_id`:
-
-* Nodo 1 → usuarios 1–3000
-* Nodo 2 → usuarios 3001–6000
-* Nodo 3 → usuarios 6001–10000
-
-El enrutamiento de consultas se realiza a nivel de aplicación, determinando el nodo destino según el `user_id`.
-
----
-
-## 🗃️ Modelo de datos
-
-(Ver sección anterior)
-
----
-
-## ⚙️ Configuración e instalación
-
-1. Crear instancias PostgreSQL en AWS
-2. Ejecutar scripts en cada nodo:
-
-   * `01_create_tables.sql`
-   * `02_indexes.sql`
-   * `03_inserts.sql` (con datos segmentados)
-3. Verificar carga de datos
-
----
-
-## 🔀 Enrutamiento de consultas
-
-La lógica de enrutamiento se basa en el rango de `user_id`:
-
-* Si `user_id <= 3000` → Nodo 1
-* Si `user_id <= 6000` → Nodo 2
-* En otro caso → Nodo 3
-
-Esto permite dirigir las consultas directamente al nodo que contiene los datos.
-
----
-
-## 🧪 Experimentos y resultados
-
-Se evaluaron distintos tipos de consultas:
-
-* Consultas selectivas (por usuario)
-* Consultas tipo feed (múltiples usuarios)
-* Consultas agregadas (GROUP BY)
-* Comparación con tabla no particionada
-
-Se utilizaron herramientas como `EXPLAIN ANALYZE` para medir rendimiento.
-
----
-
-## 🔁 Transacciones distribuidas
-
-Se implementó un esquema de Two-Phase Commit (2PC) utilizando:
-
-* `PREPARE TRANSACTION`
-* `COMMIT PREPARED`
-
-Esto permite garantizar consistencia entre múltiples nodos.
-
----
-
-## 📊 Comparación con NewSQL
-
-Se comparó PostgreSQL con soluciones como:
-
-* CockroachDB
-* YugabyteDB
-
-Analizando aspectos como escalabilidad, consistencia y complejidad operativa.
-
----
-
-## 🧠 Análisis crítico
-
-(Ver sección anterior)
-
----
-
-## 🏁 Conclusiones
+## Conclusiones
 
 El proyecto demuestra que es posible implementar un sistema distribuido utilizando PostgreSQL, aunque con una alta complejidad operativa. Tecnologías NewSQL ofrecen soluciones más automatizadas, pero con otros costos asociados.
 
 ---
 
-## 📁 Estructura del repositorio
+## Estructura del repositorio
 
 ```
 /scripts
