@@ -1,22 +1,26 @@
 -- =============================================================================
--- SI3009 | Proyecto 2 | Script 01: Creación de tablas base
--- Aplicar en CADA nodo PostgreSQL (nodo1, nodo2, nodo3)
+-- SI3009 | Proyecto 2 | Script 01: Creación de tablas base (CORREGIDO)
+-- Ejecutar en cada nodo ajustando el CHECK de rango
 -- =============================================================================
 
--- Extensión para UUID (opcional, usamos SERIAL por simplicidad)
--- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- -----------------------------------------------------------------------------
+-- CONFIGURACIÓN POR NODO (EDITAR)
+-- -----------------------------------------------------------------------------
+-- Nodo 1:
+-- CHECK (id BETWEEN 1 AND 3000)
+
+-- Nodo 2:
+-- CHECK (id BETWEEN 3001 AND 6000)
+
+-- Nodo 3:
+-- CHECK (id BETWEEN 6001 AND 10000)
 
 -- -----------------------------------------------------------------------------
 -- Tabla: users
--- Distribuida por rango de user_id entre los 3 nodos:
---   Nodo 1 → user_id 1–3000
---   Nodo 2 → user_id 3001–6000
---   Nodo 3 → user_id 6001–10000
--- Cada nodo almacena solo su rango, pero la tabla existe en todos
--- para soportar foreign keys locales.
+-- IDs controlados por la aplicación (NO SERIAL)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
-    id         SERIAL PRIMARY KEY,
+    id         INT PRIMARY KEY CHECK (id BETWEEN 1 AND 3000), -- 🔥 CAMBIAR POR NODO
     username   VARCHAR(50)  NOT NULL UNIQUE,
     email      VARCHAR(100) NOT NULL UNIQUE,
     bio        TEXT,
@@ -25,59 +29,76 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- -----------------------------------------------------------------------------
 -- Tabla: posts
--- Particionada por user_id (mismo rango que users).
--- Permite data locality: los posts de un usuario viven en el mismo nodo.
+-- Data locality: user y posts viven en el mismo nodo
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS posts (
-    id         SERIAL PRIMARY KEY,
-    user_id    INT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    content    TEXT         NOT NULL,
-    created_at TIMESTAMP    DEFAULT NOW()
+    id         INT PRIMARY KEY,
+    user_id    INT NOT NULL,
+    content    TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    
+    CONSTRAINT fk_posts_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
+
+-- Índice clave
+CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 
 -- -----------------------------------------------------------------------------
 -- Tabla: follows
--- Relación follower → followed.
--- ATENCIÓN: esta tabla es cross-shard cuando follower y followed están
--- en nodos distintos. Cada nodo almacena una copia completa (desnormalizado)
--- o se usa la lógica de la aplicación para enrutar.
--- Para este proyecto: cada nodo almacena los follows donde follower_id
--- pertenece a su rango.
+-- Solo FK en follower (local), seguido puede estar en otro nodo
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS follows (
-    follower_id INT         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    followed_id INT         NOT NULL,   -- puede ser de otro nodo, no FK cruzada
-    created_at  TIMESTAMP   DEFAULT NOW(),
-    PRIMARY KEY (follower_id, followed_id)
+    follower_id INT NOT NULL,
+    followed_id INT NOT NULL,
+    created_at  TIMESTAMP DEFAULT NOW(),
+
+    PRIMARY KEY (follower_id, followed_id),
+
+    CONSTRAINT fk_follows_follower
+        FOREIGN KEY (follower_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_follows_followed_id ON follows(followed_id);
 
 -- -----------------------------------------------------------------------------
 -- Tabla: likes
--- Similar a follows: cada nodo almacena los likes donde user_id
--- pertenece a su rango.
+-- Solo FK en user (local)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS likes (
-    user_id    INT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    post_id    INT          NOT NULL,   -- puede ser de otro nodo
-    created_at TIMESTAMP    DEFAULT NOW(),
-    PRIMARY KEY (user_id, post_id)
+    user_id    INT NOT NULL,
+    post_id    INT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    PRIMARY KEY (user_id, post_id),
+
+    CONSTRAINT fk_likes_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
+
 -- -----------------------------------------------------------------------------
--- Tabla auxiliar: shard_metadata
--- Permite a la aplicación descubrir qué nodo maneja qué rango.
+-- Tabla: shard_metadata (opcional replicada)
+-- Idealmente manejada por la app, pero se deja para simplicidad
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS shard_metadata (
-    shard_id    INT         PRIMARY KEY,
+    shard_id    INT PRIMARY KEY,
     host        VARCHAR(50) NOT NULL,
-    port        INT         NOT NULL DEFAULT 5432,
-    user_id_min INT         NOT NULL,
-    user_id_max INT         NOT NULL,
-    is_active   BOOLEAN     DEFAULT TRUE,
-    updated_at  TIMESTAMP   DEFAULT NOW()
+    port        INT NOT NULL DEFAULT 5432,
+    user_id_min INT NOT NULL,
+    user_id_max INT NOT NULL,
+    is_active   BOOLEAN DEFAULT TRUE,
+    updated_at  TIMESTAMP DEFAULT NOW()
 );
 
--- Poblar shard_metadata (ajustar IPs según ambiente)
+-- Poblar metadata (idempotente)
 INSERT INTO shard_metadata (shard_id, host, port, user_id_min, user_id_max)
 VALUES
   (1, '10.0.0.1', 5432, 1,    3000),
@@ -85,6 +106,12 @@ VALUES
   (3, '10.0.0.3', 5432, 6001, 10000)
 ON CONFLICT (shard_id) DO NOTHING;
 
--- Verificación
-SELECT 'Tablas creadas correctamente en nodo ' || current_setting('listen_addresses') AS status;
-SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
+-- -----------------------------------------------------------------------------
+-- Verificación (más confiable)
+-- -----------------------------------------------------------------------------
+SELECT 'Nodo activo en IP: ' || inet_server_addr() AS status;
+
+SELECT tablename 
+FROM pg_tables 
+WHERE schemaname = 'public' 
+ORDER BY tablename;
