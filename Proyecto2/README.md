@@ -1,19 +1,29 @@
-# Proyecto 2 - Bases de Datos Distribuidas
+## Comparativa: PostgreSQL vs NewSQL (CockroachDB / YugabyteDB)
 
-## 1. Contexto
-Sistema de red social distribuido...
+| Dimensión | PostgreSQL (clásico distribuido) | NewSQL (CockroachDB / YugabyteDB) |
+|---|---|---|
+| **Arquitectura base** | Motor monolítico, no distribuido de forma nativa. La distribución se logra manualmente con herramientas externas (Citus, pgPool, etc.) | Diseñado desde cero para distribución horizontal. Cada nodo es igual (arquitectura shared-nothing) |
+| **Particionamiento** | Manual. El desarrollador define las particiones por rango, hash o lista con `PARTITION BY`. La lógica de enrutamiento la gestiona la aplicación o un proxy | Automático (auto-sharding). El motor divide los datos en rangos de claves y redistribuye los shards dinámicamente sin intervención manual |
+| **Transparencia de enrutamiento** | Baja. La aplicación necesita saber en qué nodo está cada dato, o se usa un middleware (ej. pgBouncer, Citus). Un join entre particiones distintas requiere lógica explícita | Alta. El motor enruta internamente cualquier consulta al nodo correcto. El cliente conecta a cualquier nodo y obtiene el dato correcto de forma transparente |
+| **Replicación** | Líder-seguidor (Primary-Replica). Se configura manualmente con `postgresql.conf` y `pg_hba.conf`. Soporta replicación sincrónica y asincrónica vía `synchronous_commit` | Basada en el protocolo Raft. Cada rango de datos tiene su propio grupo Raft con un líder y réplicas. El consenso es automático y continuo |
+| **Consistencia** | ACID completo en un nodo. En configuración distribuida manual, la consistencia entre nodos depende del nivel de `synchronous_commit` y del diseño del sistema | Consistencia serializable global por defecto. Garantiza ACID en transacciones que abarcan múltiples nodos sin configuración adicional |
+| **Modelo CAP** | Prioriza Consistencia (C) y Disponibilidad (A) en operación normal. Ante una partición de red (P), hay riesgo de split-brain si el failover no se gestiona correctamente | Prioriza Consistencia (C) y Tolerancia a particiones (P). Ante una partición, el sistema prefiere rechazar escrituras antes que aceptar datos inconsistentes |
+| **PACELC** | PA/EL: ante partición sacrifica disponibilidad; en operación normal prioriza latencia baja sobre consistencia fuerte (depende de `synchronous_commit`) | PC/EC: ante partición sacrifica disponibilidad; en operación normal acepta mayor latencia para garantizar consistencia fuerte |
+| **Transacciones distribuidas** | No nativas. Se implementan manualmente con el protocolo Two-Phase Commit (2PC): `PREPARE TRANSACTION` + `COMMIT PREPARED`. Complejidad alta y riesgo de bloqueo si el coordinador falla | Nativas y transparentes. El motor implementa internamente un protocolo similar a 2PC con Raft. El desarrollador escribe `BEGIN` / `COMMIT` como en cualquier BD relacional |
+| **Failover** | Manual o semi-automático con herramientas externas (Patroni, repmgr). Requiere promover un seguidor a líder explícitamente. Riesgo de split-brain sin configuración cuidadosa | Automático. Raft elige un nuevo líder en segundos si el nodo líder de un rango falla. No requiere intervención del operador |
+| **Failback** | Manual. Se debe reintegrar el nodo recuperado como réplica y sincronizarlo antes de reconvertirlo en líder | Automático. El nodo recuperado se reincorpora al cluster, sincroniza su estado vía Raft y comienza a recibir tráfico sin intervención manual |
+| **Tolerancia a fallos (quórum)** | No tiene concepto de quórum nativo. La disponibilidad depende de cuántas réplicas estén activas y del valor de `synchronous_standby_names` | Basado en quórum Raft: con 3 nodos tolera 1 fallo; con 5 nodos tolera 2 fallos. Si se pierde el quórum, el cluster deja de aceptar escrituras (prioriza consistencia) |
+| **Latencia de escritura** | Baja en configuración asincrónica (`synchronous_commit = off`). Alta en configuración sincrónica estricta, especialmente con múltiples réplicas geográficamente distribuidas | Mayor que PostgreSQL local debido al overhead del consenso Raft. En configuración de un solo datacenter, la penalización suele ser de 1–5 ms adicionales por escritura |
+| **Latencia de lectura** | Muy baja en lecturas locales desde el nodo primario o réplicas locales | Variable. Lecturas consistentes van al líder del rango; lecturas "follower reads" (lectura desde réplicas) son más rápidas pero con posible staleness de milisegundos |
+| **Escalabilidad horizontal** | Limitada y compleja. Agregar nodos requiere redistribuir particiones manualmente y actualizar la lógica de enrutamiento en la aplicación | Nativa. Se agrega un nodo al cluster y el motor redistribuye automáticamente los shards para balancear la carga |
+| **Joins distribuidos** | Costosos. Un join entre tablas en nodos distintos requiere transferir datos entre nodos (network shuffle). Se detecta con `EXPLAIN ANALYZE` como `Gather` o `Append` nodes | El motor optimiza joins distribuidos internamente. Aun así, los joins entre rangos distintos tienen overhead de red; el planner los minimiza colocando datos relacionados juntos (locality) |
+| **Complejidad operativa** | Alta en distribución. Configurar sharding, replicación, failover y monitoreo requiere conocimiento profundo y múltiples herramientas externas (Patroni, pgBouncer, etc.) | Baja a media. La distribución, replicación y failover son responsabilidad del motor. El operador gestiona el cluster (nodos, zonas) pero no el routing interno |
+| **Complejidad de desarrollo** | Media-alta. El desarrollador debe conocer la topología de shards, escribir lógica de enrutamiento y manejar 2PC manualmente para transacciones cross-shard | Baja. El desarrollador usa SQL estándar. Las transacciones distribuidas, el routing y la consistencia son transparentes |
+| **Compatibilidad SQL** | SQL estándar completo + extensiones propias de PostgreSQL (JSONB, arrays, full-text search, extensiones como PostGIS) | Compatible con el dialecto SQL de PostgreSQL (CockroachDB) o PostgreSQL + Cassandra (YugabyteDB). Algunas funciones avanzadas de PostgreSQL pueden no estar disponibles |
+| **Costo de infraestructura** | Bajo si se usan instancias propias. El costo operativo (DBA, mantenimiento) es alto | Más alto en recursos por nodo (mínimo 3 nodos recomendados). El costo operativo es menor por la automatización, pero el hardware/cloud es más costoso |
+| **Madurez y ecosistema** | Muy maduro (30+ años). Ecosistema enorme: ORMs, herramientas de migración, monitoreo, extensiones | Relativamente joven (CockroachDB desde 2015, YugabyteDB desde 2017). Ecosistema en crecimiento, pero menor que PostgreSQL |
+| **Caso de uso ideal** | Aplicaciones con distribución moderada, equipos con experiencia en PostgreSQL, cuando se necesita control total sobre la topología | Aplicaciones que requieren escala global, alta disponibilidad automática, y donde la complejidad operativa debe ser mínima |
 
-## 2. Modelo de Datos
-- Users
-- Posts
-- Likes
+---
 
-## 3. PostgreSQL
-
-### Particionamiento
-Se implementó particionamiento por hash...
-
-### Experimento 1
-```sql
-EXPLAIN ANALYZE SELECT ...
-
+> **Nota:** Los valores de latencia y comportamiento exacto dependen de la configuración del cluster, la geografía de los nodos y la carga de trabajo. Los experimentos del proyecto documentan mediciones concretas en el ambiente de laboratorio.
