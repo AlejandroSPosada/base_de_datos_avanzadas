@@ -68,6 +68,9 @@ Estas consultas requieren agregaciones y procesamiento de grandes volúmenes de 
 
 El sistema está compuesto por múltiples nodos PostgreSQL desplegados en instancias independientes (AWS EC2). Cada nodo almacena una partición de los datos basada en rangos de `user_id`.
 
+
+<img width="684" height="598" alt="Screenshot 2026-04-06 124112" src="https://github.com/user-attachments/assets/76d86fed-90c9-4dfe-b40d-5f56aacccad7" />
+
 ---
 
 ## Estrategia de distribución (Sharding)
